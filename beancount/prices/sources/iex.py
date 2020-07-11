@@ -12,6 +12,7 @@ import datetime
 
 from dateutil import tz
 import requests
+import os
 
 from beancount.core.number import D
 from beancount.prices import source
@@ -21,30 +22,26 @@ class IEXError(ValueError):
     "An error from the IEX API."
 
 
+IEX_TOKEN = os.environ["IEX_TOKEN"]
+
 def fetch_quote(ticker):
     """Fetch the latest price for the given ticker."""
 
-    url = "https://api.iextrading.com/1.0/tops/last?symbols={}".format(ticker.upper())
+    url = "https://cloud.iexapis.com/stable/stock/{}/quote?token={}".format(ticker.upper(), IEX_TOKEN)
     response = requests.get(url, timeout=300)
     if response.status_code != requests.codes.ok:
         raise IEXError("Invalid response ({}): {}".format(
             response.status_code, response.text))
 
-    results = response.json()
-    if len(results) != 1:
-        raise IEXError("Invalid number of responses from IEX: {}".format(
-            response.text))
-    result = results[0]
+    result = response.json()
 
-    price = D(result['price']).quantize(D('0.01'))
+    price = D(result['latestPrice']).quantize(D('0.01'))
 
-    # IEX is American markets.
-    us_timezone = tz.gettz("America/New_York")
-    time = datetime.datetime.fromtimestamp(result['time'] / 1000)
-    time = time.astimezone(us_timezone)
+    fr_timezone = tz.gettz("Europe/Paris")
+    time = datetime.datetime.fromtimestamp(result['latestUpdate'] / 1000)
+    time = time.astimezone(fr_timezone)
 
-    # As far as can tell, all the instruments on IEX are priced in USD.
-    return source.SourcePrice(price, time, 'USD')
+    return source.SourcePrice(price, time, 'EUR')
 
 
 class Source(source.Source):
